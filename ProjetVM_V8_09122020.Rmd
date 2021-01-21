@@ -1,0 +1,980 @@
+---
+title: ''
+output:  bookdown::html_document2
+biblio-style: alphadin
+nocite: '@*'
+bibliography: references.bib
+---
+
+
+
+```{r setup, include=FALSE}
+if (Sys.getenv("USERNAME")=="David"){
+  setwd("C:\\Users\\David\\OneDrive\\1_Ecole\\HEC\\Msc\\Aut 2020\\Apprentissage Statistique\\Travail d'équipe")
+}else if (Sys.getenv("USERNAME")=="Christelle"){
+  setwd("~/HEC - MASTER/A2020/APPRENTISSAGE STATISTIQUE/PROJET")
+}else 
+{  setwd("/Users/quentintabourin/Desktop/HEC_A2020/M60603 - apprentissage statistiques")
+}
+
+#htmltools::img(src = knitr::image_uri(".\\Images\HEC Montreal.jpg"),
+#             alt = 'logo',
+#              style = 'position:absolute; top:0; right:25%;width:20vw%;height:auto; padding:10px;')
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE,
+                      fig.align = "center",
+                      fig.height = 2)
+
+# Pour la reproductabilité
+set.seed(11118064)
+```
+
+```{r Library}
+library(dplyr)
+library(ropenaq) 
+library(lubridate)
+library(purrr)
+library(ggplot2)
+library(grid)
+library(zoo)
+library(gridExtra)
+library(randomForest)
+library(caret)
+library(sp)
+library(leaflet)
+library(reshape2)
+library(readxl)
+library(magrittr)
+library(e1071)
+library(kableExtra)
+library(knitr)
+library(bookdown)
+
+
+```
+
+
+
+
+
+<center>
+
+```{r, fig.align = 'center', echo=FALSE, fig.width=1}
+
+knitr::include_graphics(path = "./Images/HEC.gif")
+```
+
+
+
+</br> 
+</br> 
+</br>   
+
+
+MATH 60603 - Apprentissage Statistique 
+
+
+</br>
+</br>
+
+**Impact des différentes politiques de confinement sur le taux de NO2 à Paris**
+</br> 
+</br> 
+</br> 
+</br> 
+</br> 
+</br> 
+Présenté à  
+</br>
+</br> 
+</br>
+**Pre. Aurélie Labbe**
+</br>
+</br> 
+</br> 
+</br> 
+</br>
+</br>
+Par
+</br>
+</br> 
+</br>
+</br>
+**Christelle George - 11288106**<br>
+**David Lemieux - 11118064**<br>
+**Quentin Tabourin - 11290690**
+
+</br> 
+</br>
+</br> 
+</br> 
+</br> 
+</br>
+</br> 
+</br>
+Le 18 décembre 2020
+
+À Montréal
+</center>
+\newpage
+
+
+
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# Introduction 
+
+Les différentes politiques de confinement recommandées face à l’épidémie de la Covid19 ont profondément transformé les habitudes du quotidien, et ce à l’échelle mondiale. Désormais, la grande majorité des interactions humaines (sociales et professionnelles) se fait virtuellement. L’une des conséquences majeures de ce nouveau monde virtuel se reflète dans les habitudes de transports. Or, les voitures à moteur à combustion interne (Diesel) produisent du dioxyde d’azote NO2, un polluant majeur de l’atmosphère terrestre.
+
+Les images satellites et les stations de mesure ont montré la diminution de la concentration de NO2 lors du confinement du printemps 2020[@Forster]. La variation a notamment été visible dans les zones industrialisées et les grandes villes. En général, la mesure de pollution la plus utilisée est celle de CO2. Cependant, sa variation dans le temps ne peut pas être facilement observée de façon ponctuelle. Pour cette raison, la mesure de pollution choisie est le NO2. À gauche il est possible de voir la Figure \@ref(fig:fig1)
+<br>
+
+```{r fig1, out.width = "45%",out.extra='style="float:right; padding:10px"',fig.cap="Carte Paris"}
+knitr::include_graphics(path = "./Images/INTRO.jpg")
+```
+
+Notre étude porte sur la ville de Paris : il s'agit d'une des villes les plus denses au monde. La principale source d'émission de NO2 dans cette ville est liée à son trafic routier. Il existe bien entendu de nombreuses règlementations en terme de taux de particules maximales contenues dans l'air. Selon un décret de 2010, la valeur limite annuelle de NO2, pour la protection de la santé humaine, est fixée à 40 $\mu g/m^3$, ce qui correspond à une valeur de 21 particules par million (ppm) approximativement. Ceci dit, si la moyenne nationale de la France respecte ce taux, nous ne pouvons pas en dire de même sur la ville de Paris. Ainsi, à proximité des axes les plus chargés, les niveaux de NO2 sont, en moyenne, deux fois supérieurs à la valeur limite annuelle. 
+<br>
+
+Ce polluant de NO2 est fort complexe puisqu'il provient des émissions directes (transports etc.) mais aussi des équilibres chimiques avec le polluant de l'ozone O3. À titre de simplification, ce projet traite uniquement du NO2 et ne vise pas à quantifier l'effet mutuel des polluants.
+<br>
+<br>
+
+## Objectif d'analyse
+
+Le but de ce projet est donc de mieux comprendre l’impact des différentes politiques de confinement à Paris sur le taux d’émission de NO2. Pour y parvenir, les données adéquates sont collectées et transformées afin d'expliciter les caractéristiques recherchées. Différents modèles sont étudiés et entrainés; celui possédant les meilleures prédictions sur l'ensemble de validation est ensuite choisi. Ainsi, deux objectifs peuvent être définis :
+
+- Premièrement, étudier l'effet du confinement à Paris sur le taux de NO2 émis.
+- Deuxièmement, trouver le meilleur modèle de prédiction parmi plusieurs modèles différents.
+
+
+## Revue de la littérature
+
+De nombreuses études ont été faites sur des sujets similaires ou connexes avec la méthode CART et ce, à une échelle mondiale (Bulgarie, Pologne, Canada, Californie etc).
+Dans la majorité des cas où l’on cherche à prédire une variable cible de pollution (PM10, NOx, CO,O3), ce sont des variables météorologiques qui sont utilisées en guise de variables explicatives : la température minimale et maximale de la journée, l’humidité relative, la vitesse et la direction du vent, la pression, la couverture nuageuse et bien d’autres ([@stoimenova2017regression], [@burrows1995cart])
+<br>
+Il est intéressant de noter que, quelle que soit l’étude réalisée, le traitement des données est la partie la plus importante et la plus longue. Plusieurs points méritent d’être soulevés ici. Les données temporelles sont en général non stationnaires en moyenne et en variance, et traduisent des cycles saisonniers multiples (quotidien, hebdomadaire ou annuel). Ainsi, le traitement de ces variables est requis puisqu’il permet de simplifier cette saisonnalité en éliminant la non stationnarité et permet également de filtrer les cycles ([@dudek2015short], [@choi2013evaluating]). À titre d’exemple, l’ajout de prédicteurs particuliers (lag) permet de tenir compte des données temporelles ou encore une transformée WDI de la direction du vent permet de tenir compte de sa périodicité ([@stoimenova2017regression]).
+Aussi, dans le cas d’une variable cible non normale (PM10 par exemple), la transformée de Yeo Johnson y remédie en lui accordant une allure normale. En comparant plusieurs modèles différents (PM10 vs PM10 transformé), la meilleure performance est atteinte avec la variable transformée ([@stoimenova2017regression]). Le nombre de prédicteurs utilisé doit être choisi judicieusement : trop peu de variables explicatives engendre de mauvaises prédictions des évènements rares (une forte concentration – anormale – de O3 ne sera pas convenablement prédite par exemple). Finalement, l’horizon temporel des données est important : idéalement, les données sur de nombreuses années sont requises afin de cerner correctement la variabilité liée à certaines variables ([@burrows1995cart]).
+D’autres part, les modèles sont évalués selon plusieurs critères. Si certaines études se basent sur une comparaison des coefficients de détermination R2 des différents modèles ([@stoimenova2017regression]), d’autres privilégient la stabilisation de l’indicateur de l’erreur OOB ([@dudek2015short]). Plusieurs études indiquent également l’importance des variables selon le modèle choisi.
+<br>
+
+La méthode CART est une méthode très populaire quant à la prédiction dans le domaine du climat (météo / pollution) mais s’applique également très bien dans d’autres domaines variés comme la finance (I. Bou-Hamad, 2020), la biostatistique [@kane2014comparison] et l'environnement [@gocheva2019regression]. Des auteurs comme [@dudek2015short] et [@mei2014random] ont utilisé les forêts aléatoires afin de prédire la demande d'électricité à court-terme. Comme le mentionne [@dudek2015short], les RF sont des modèles relativement simples avec un nombre restreint de paramètres à calibrer et à évaluer. 
+<br>
+*In fine*, d’autres méthodes sont employées dans un contexte de prédiction. La méthode de Takagi-Sugeno, par exemple, est adaptée pour traiter des systèmes non linéaires [@elayan2006ozone]. Des modèles hybrides CNN LSTM également ont été employés : la LSTM est une version spéciale des RNNs, telle que chaque neurone dans sa structure est une cellule mémoire qui permet le transfert de données. Ce modèle est très adapté pour les séries temporelles [@kaya2020deep]. Nous ne nous y attarderons pas puisque ceci n’est pas le but de notre projet.
+<br>
+Somme toute, la nouveauté de notre projet relève de l’actualité qui y est attachée : si beaucoup d’études ont déjà traité de la relation entre les données météorologique et une certaine variable de pollution, très peu ont considéré leur relation avec les politiques de confinement instaurées pour faire face à la pandémie de la Covid19.
+<br>
+
+## Présentation des données
+<br>
+Quatre bases de données sont considérées dans le cadre de ce projet, soit une sur des données de mobilité, une sur des données météorologiques, une autre sur des données de confinement et la dernière sur des données de taux de NO2. 
+<br>
+La première base de données est liée à la mobilité : elle est fournie par Google et relève des tendances de mobilité mondiale à partir des données Google Maps. Ces données sont classées en fonction du type de déplacement (travail, résidentiel, parc, courses…) et débutent le 15 février 2020. Elles sont exprimées en terme de pourcentage par rapport à la référence, soit la date du 15 février 2020. 
+<br>
+```{r Data_Import_1 }
+
+mobility<- read.csv(file = "DATA/2020_FR_Region_Mobility_Report.csv",header =TRUE,encoding = "UTF-8")
+mobility <- mobility %>% filter( sub_region_2=="Paris") %>% select(-c(country_region_code,country_region,sub_region_1,metro_area,iso_3166_2_code,census_fips_code))
+mobility$date <- as.Date(mobility$date)
+mobility <- mobility %>% select(-sub_region_2)
+colnames(mobility)[1] <- "Date"
+```
+La deuxième base de données concerne les variables météorologiques. Elle est tirée des messages internationaux d’observation en surface (SYNOP) circulant sur le système mondial de télécommunication (SMT) de l’Organisation Météorologique Mondiale (OMM). Cette base de données comportant beaucoup de prédicteurs, nous nous limitons à la selecion de 7 variables jugées importantes: la direction moyenne du vent, la vitesse moyenne du vent, les précipitations moyennes, l'humidité moyenne, la pression moyenne, les températures minimales, et les températures maximales. Ces variables ont été mesurées dans un lieu localisé au sud de l'aéroport d'Orly (environ 13km au sud de Paris centre). Pour simplifier notre étude, il est assumé que ces valeurs sont similaires à celles observées à Paris.
+<br>
+```{r Data_Import_2 }
+
+weather<- read.csv2(file = "DATA/Weather_Data.csv",header =TRUE,encoding = "UTF-8")
+weather <- weather %>% select(Date, Direction.du.vent.moyen.10.mn,
+                              Précipitations.dans.les.3.dernières.heures,
+                              Vitesse.du.vent.moyen.10.mn,
+                              Humidité,Pression.station,
+                              Température...C.) %>% mutate(date= as.Date(Date)) %>% select(-Date)
+weather <- weather[,c(7,6,1,2,3,4,5)]
+cols <- 2:7
+weather[,cols] = apply(weather[,cols], 2, function(x) as.numeric(as.character(x)))
+
+weather <- weather %>% group_by(date) %>% summarise(Moy_dir_vent=mean(Direction.du.vent.moyen.10.mn,na.rm = TRUE),
+                                                    Moy_pre= mean(Précipitations.dans.les.3.dernières.heures,na.rm = TRUE),
+                                                    Moy_vit_vent= mean(Vitesse.du.vent.moyen.10.mn,na.rm = TRUE),
+                                                    Moy_humitite= mean(Humidité,na.rm = TRUE),
+                                                    Moy_pression= mean(Pression.station,na.rm = TRUE),
+                                                    T_max= max(Température...C.,na.rm = TRUE),
+                                                    T_min= min(Température...C.,na.rm = TRUE))
+colnames(weather)[1] <- "Date"
+```
+La troisième base de données comporte les observations du niveau de confinement imposé en France. Encore une fois, nous assumons que ces mêmes niveaux de confinement s'appliquent à la ville de Paris. Une première base de données sur le niveau de confinement en France était disponible pour les dates du 1er janvier 2020 au 11 juin 2020. Nous avons donc complété manuellement cette base de données pour les dates manquantes en se basant sur les annonces de confinement par le gouvernement français.
+<br>
+```{r Data_Import_3 }
+
+confinement <- read_excel("DATA/ConfinementBIS.xlsx")
+confinement$Date <- as.Date(confinement$Date)
+colnames(confinement)[2] <- "Conf_level"
+
+```
+Finalement, la dernière base de données concerne notre variable cible, soit le taux de NO2. Elle provient de l’organisation à but non lucratif «OpenAQ» et contient la variable réponse du taux de NO2, en ppm, mesurée au cours des 5 dernières années à une échelle mondiale. Les données sont classées par localisation (pays ou région). Dans le cadre de ce projet, nous avons sélectionné les observations sur la ville de Paris à partir de 14 points d'observations différents:
+<br>
+```{r Data_Import_4}
+aq <- readRDS("DATA/Paris_aq.rds")
+
+```
+
+
+# Méthodologie
+
+## Méthodologie sur les données
+
+Un regard critique est porté sur la base de données "aq" contenant notre variable cible de NO2. Il s'agit de sélectionner un ou plusieurs points d'observations pertinents parmi les 14 à disposition. 
+
+### Traitement de la base de données "AQ"
+
+```{r fig2, out.width = "35%",out.extra='style="float:right; padding:15px"',fig.cap="Carte Paris"}
+#aq2 <- aq %>% group_by(location) %>% summarise(number=n(),lon=mean(longitude),lat=mean(latitude),last_date=max(Date))
+#leaflet(aq2) %>% addMarkers(~lon,~lat,label=~as.character(location), labelOptions = labelOptions(noHide = T,direction="auto")) %>% addTiles()
+knitr::include_graphics(path = "./Images/Paris et locations.jpg")
+```
+Comme il est possible de le voir dans la carte ci-contre (Figure \@ref(fig:fig2)), les points d'observations sont répartis sur tout le territoire de paris, ce qui peut entraîner une grande variabilité dans les données observées. Les 3 points d'observations les plus au centre de Paris sont choisis, soit "FR04143","FR04071" et "FR04141". Il est important de noter que ces points de prélèvement se situent à proximité de grands axes routiers, dans une zone ou la circulation est souvent congestionnées afin de garantir des prédictions les plus réalistes possibles.
+<br>
+<br>
+```{r fig3, fig.align="center",fig.height=2.5,fig.cap=" Taux horaire"}
+
+aq_keep <- aq %>% filter(location %in% c("FR04143","FR04071","FR04141"))
+ggplot(data=aq_keep)+
+  geom_point(mapping=aes(x=Date,y=value,color=location),alpha=0.35)+ 
+  labs(y="Taux de NO2 (ppm)", x = "Date",color="Location")+
+  ggtitle("Taux de NO2 horaire relevé à Paris\n selon 3 points de prélèvement en fonction du temps")+
+  theme(legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))
+
+```
+
+Il est possible de voir que la station FR04141 est souvent beaucoup plus extrême que les deux autres stations. Cette raison nous pousse a croire que les lectures sont possiblement biaisées ou que cette station est très sensible aux évènements sporadiques et imprévisibles. Il est aussi possible de voir que la station FR04143 n'a pas toutes les données disponibles pour la période à l'étude. Cette station sera donc enlevée.
+Au final, la station FR04071, située tout près de l'ile de la cité, est retenue. À titre indicatif, il n'y a pas une seule bonne station dans ce contexte, tant que la station de prélèvement se situe sur un axe bien fréquenté et représentatif de la réalité (FR04131 par exemple).
+
+```{r DataloadPrep2, echo=FALSE}
+
+aq_keep <- aq_keep %>% filter(location =="FR04071")
+# ggplot(data=aq_keep)+
+#    geom_point(mapping=aes(x=Date,y=value,color=location),alpha=0.55)+ labs(y="Taux de NO2 moyen quotidien (ppm)", x = "Date")+
+#   ggtitle("Taux de NO2 horaire à Paris au point FR04071\nen fonction du temps")+
+#   theme(legend.position = "none")
+
+```
+
+Pour aller encore plus loin, deux observations peuvent être émises à partir du graphique ci-dessus (Figure \@ref(fig:fig3)) pour la station FR04071. Premièrement, plusieurs observations horaires affichent 0, ce qui est impossible, même par exemple la nuit lorsque la circulation est presque nulle. Deuxièmement, il est possible de voir une observation extrême avoisinant les 300ppm, très éloignée de l'observation la plus proche. Ces données seront donc éliminées. Comme il s'agit d'observations mesurées à chaque heure, éliminer ces observations extrêmes n'est pas problématique: cela ne fera que corriger la moyenne journalière et ainsi donnera plus de fiabilité à nos données. 
+
+```{r fig4, fig.cap="Outliers"}
+aq_keep <- aq_keep %>% filter(value<200,value>0)
+aq_keep$hour <- factor(hour(aq_keep$Date))
+
+aq_keep$simpleDate <- as.Date(aq_keep$Date)
+aq_final <- aq_keep  %>% group_by(simpleDate) %>% summarise(mean_no2=mean(value,na.rm = T))
+colnames(aq_final)[1] <- "Date"
+
+ggplot(data=aq_final)+geom_point(mapping=aes(x=Date,y=mean_no2),color="green")+ labs(y="Taux de NO2 (ppm)", x = "Date")+ ggtitle("Taux moyen quotidien de NO2 au point FR04071")
+
+```
+Il est possible de remarquer sur le graphique ci-dessus (Figure \@ref(fig:fig4)) que Paris a toujours dépassé la limite de régulation autorisée du taux de NO2 de 21 ppm, on voit cependant que l'allure du graphique semble décroissante. Entre 2018 et 2020, le graphique indique une légère baisse de ce taux, en terme d'allure générale.
+
+L'année 2020 marque une diminution plus marquée du taux moyen quotidien de NO2 à Paris. Ceci est accentué dès lors que le niveau 3 le plus sévère est atteint, en mars 2020. Cette décroissance nette est marquée par l'absence de valeurs extrêmes. Le relâchement du confinement au niveau 1 (le moins sévère) début juin 2020 s'accompagne d'une augmentation, à nouveau, du taux de NO2. 
+
+Somme toute, ceci indique déjà que le confinement semble avoir eu un impact sur le taux d'émission de NO2. Ceci dit, l'horizon temporel étant limité aux données à cette date, il faudrait idéalement accumuler davantage de données de confinement afin de garantir plus de robustesse des résultats.
+
+
+```{r, size='tiny'}
+data <- merge(aq_final,weather,by = "Date",all.x=T)
+data <- merge(data,confinement, by="Date",all.x=TRUE)
+data$Conf_level[is.na(data$Conf_level)] <- 0
+data <- merge(data,mobility, by="Date",all.x=T)
+
+
+```
+
+### Catégories de variables
+
+Les variables explicatives peuvent être divisées en 4 catégories: Variables de calendrier, Variables de décalage, Variable de climats et  Variables sociales
+
+#### Variables de calendrier
+
+Inspiré de la revue de littérature, 5 variables sont ajoutées à notre base de données - en plus de la variable principale "Date". Elles permettront de contextualiser les observations et ainsi de mieux interpréter les résultats. La variable "day" indique le jour du mois dont il est question. Les variables "weekday" et "month" indiquent respectivement le jour de la semaine ainsi que le mois propre à l'observation. La variable "julian" représente le "id" de l'observation. Finalement, la variable "jour_ferie" est une variable binaire qui vaut 0 les jours ordinaires et 1 les jours fériés.
+
+```{r fig5, out.width='50%',out.extra='style="float:right; padding:15px"',fig.cap="Histogramme moyenne"}
+
+data$day <- day(data$Date)
+data$weekday <- factor(weekdays(data$Date))
+data$month <- factor(months(data$Date))
+data$julian <- julian(data$Date, origin = min(data$Date))
+
+
+ggplot(data)+
+  geom_histogram(mapping = aes(x=mean_no2),color="green") + labs(y="# Observations", x = "NO2 moyen quotidien")+
+  ggtitle("Valeurs de NO2 moyennes quotidienne")
+
+
+jour_ferie <- read.csv("DATA/jours_feries_metropole.csv",header=FALSE)
+jour_ferie <- jour_ferie %>% select(V1)
+data$jour_ferie <- 0
+data$jour_ferie[data$Date %in% as.Date(jour_ferie$V1)] <- 1
+data$jour_ferie <- factor(data$jour_ferie)
+
+```
+
+Il est posible de voir sur le graphique ci-contre (Figure \@ref(fig:fig5)) que le taux moyen de NO2 quotidien le plus fréquent au point de prélèvement FR04071 est de 37.5 ppm. Ces données confirment ce qui a été dit dans l'introduction, à savoir que la ville de Paris ne respecte pas les réglementation de 21 ppm. Le taux émis est quasiment le double!
+<br>
+<br>
+
+
+
+#### Variables de décalage
+
+Des variables représentant la variable dépendante à plusieurs moments dans le temps "lag" sont utilisées. Cette technique permet de considérer la dépendance temporelle dans les observations de la série.
+Jusqu'à présent, la variable cible NO2 n'a pas été filtrée en prenant en compte sa saisonnalité. En d'autres termes, une hausse de ce taux à un certain moment de l'année pourrait ne pas être significative s'il s'agit d'une "tendance" quotidienne, hebdomadaire ou mensuelle. Afin de garantir des résultats fiables et interprétables, les variables décalées de 1, 7 et 28 jours sont utilisées. 
+
+
+```{r fig6, fig.height=2, fig.cap="Delta moyenne"}
+# Ajout des saisonalité
+data$no2_lag1 <- lag(data$mean_no2,1)
+data$no2_lag7 <- lag(data$mean_no2,7)
+data$no2_lag28 <- lag(data$mean_no2,28)
+data <- data %>% filter(!is.na(no2_lag28))
+
+ggplot(data=data)+geom_point(mapping=aes(y=mean_no2 - no2_lag1,x=Date),color="darkgreen")+ 
+  ggtitle("Delta à la moyenne quotidienne de No2")+
+  ylab("No2 à t - No2 à t-1")
+
+
+```
+
+On remarque sur le graphique précédent (Figure \@ref(fig:fig6)) que la différence entre la moyenne de NO2 et la moyenne de No2 de la veille ne varie pas avec le temps. Cela illustre le fait que l'ajout de la variable de décalage stationnarise le problème. 
+
+
+#### Variables de climats
+
+Le traitement des variables de climat se base sur les différentes études de modélisation d'un polluant (Voir Revue de littérature). La transformation de la variable de direction du vent est faite suivant les travaux de [@stoimenova2017regression] qui utilise la transformation suivante
+$$WDI = 1 + \sin(Wind\_direction +\frac{\pi}{4})$$
+
+```{r}
+data$Moy_dir_vent <- 1+ sin(data$Moy_dir_vent +pi/4)
+```
+
+D'autre part, concernant la variable de température, plusieurs auteurs comme [@hor2005analyzing] ont utilisé des transformations de cette variable  afin de prendre en considération la sévérité et la durée des cycles de température. Cette logique est utilisée ici afin de linéariser davantage cette variable. Ceci est fort pertinent puisqu'à titre d'exemple, le modèle de régression linéaire assume la linéarité entre les variables.
+
+
+```{r fig61,fig.cap=" Temperature"}
+
+data$hdd = sapply(data$T_min,FUN=function(x){ max(10-x,0)})
+data$cdd = sapply(data$T_max,FUN=function(x){ max(x-15,0)})
+                  
+data <- data %>% select(-c(T_max,T_min))
+
+ggplot(data=data %>% filter(month %in% c("avril","février","juin")) )+geom_point(mapping=aes(y=mean_no2,x=cdd),color="green")+facet_grid(month~.)+ 
+  labs(y="Taux moyen de NO2", x = "Température maximale linéarisée")+
+  ggtitle("Relation entre le taux moyen de NO2 et\nla température maximale linéarisée pour 3 mois")  
+```
+
+Somme toute, on voit à la Figure \@ref(fig:fig61) que l'augmentation de la température (maximale et minimale) induit une augmentation du taux moyen de NO2. De plus, les valeurs de températures nulles sont celles qui n'auront pas de pouvoir prédictif, mais nous ne nous attarderons pas sur ce point ici.
+
+
+#### Variables sociales
+Parmi les variables sociales, la variable principale à l'étude est le niveau de confinement associé à Paris : nous nous intéressons à sa significativité. Les variables de transport selon plusieurs catégories de déplacements seront aussi utilisées.
+
+```{r }
+data$Conf_level <- factor(data$Conf_level,ordered=TRUE)
+```
+\newline
+<br>
+
+## Méthodologie sur les méthodes considérées
+
+Plusieurs modèles sont utilisés dans le cadre de notre projet, le but étant de trouver celui qui offre les meilleurs résultats.
+
+Dans un premier temps, un modèle linéaire est considéré. Il s'agit du modèle  de référence, qui s'inscrit dans l'optique d'un apprentissage supervisé. Il suppose une relation linéaire entre chacun des prédicteurs et la variable d'intérêt Y, soit le taux de NO2. Les termes d'erreurs suivent une loi normale centrée de moyenne 0 et sont indépendants. Ce modèle est entrainé deux fois: avec et sans la variable de confinement, puisque ce projet tente de souligner l'effet de cette variable en particulier.
+
+Ensuite, une deuxième méthode d'apprentissage supervisé est considérée : la méthode du support vector machine pour regression. Il s'agit d'un cas particulier de classification où les classes sont indénombrables. Aussi, le noyau linéaire permet de mieux généraliser comparativement à d'autres noyaux (polynomial, par exemple). Dans cette méthode, la validation croisée est employée afin de rechercher le paramètre de tuning C. Plus C augmente, plus la tolérance aux observations mal calculées augmente.
+
+Finalement, l'approche des forêts aléatoires est étudiée. En fait, comme la revue de littérature a pu le souligner, il s'agit d'une approche qui est très commune et sans doute une des plus puissantes pour la classification et l'étude des relations, et ce quel que soit le domaine étudié (environnemental, financier, médical etc.). L'idée globale est simple : une moyenne des valeurs prédites par différents modèles est souvent plus précise et plus stable que la valeur prédite à l'aide d'un seul modèle. De plus, cette méthode permet de prédire la valeur d'une variable cible en utilisant un nombre de "prédicteurs candidats", quelle que soit leur relation (linéaire ou pas) avec la variable cible. Somme toute, l'approche des forêts aléatoires permet de modéliser des liens compliqués entre une variable cible et des prédicteurs tout en assurant une interprétation simple! 
+
+Lors de l'implémentation de cette méthode, il s'agit de calibrer 3 paramètres essentiels au moyen de la validation croisée [@mei2014random] : le nombre de prédicteurs candidats (mtry), le nombre d'arbres dans la forêt (ntree) et la taille minimale des noeuds terminaux (node_size). Dans la revue de littérature, ceux utilisés sont 500 arbres, 3 variables par split, et un minimum de 5 observations par noeud terminal. Dans notre cas, nous souhaitons élargir la recherche de paramètres afin d'inclure d'autres facteurs observés dans des travaux connexes. Ainsi, nous fixons le nombre d'arbres de la forêt à 300. Le nombre de prédicteurs candidats sera varié parmi une grille de valeurs entre 3 et 16, et la taille minimale des noeuds terminaux sera variée entre les valeurs de 3 et 7. Le modèle est créé avec le package RandomForest de R [@rf] .
+
+Puisque plusieurs modèles différents sont étudiés, le jeu de données est divisé en un ensemble d'apprentissage et un ensemble de test. Ceci permet, ultimement, de comparer les modèles entre eux avec un indicateur non biaisé de performance.
+
+En résumé, trois familles de modèles différentes sont considérées dans notre étude. Dans la première famille de modèles, la régression *linéaire simple* est employée. Avec très peu de **fine tuning**, il s'agit de notre modèle de référence. Deuxièmement, la famille des *SVM* est testée, plus précisément celle avec un noyau linéaire, avec une validation croisée sur la paramètre de coût. Troisièmement, les modèles de *forêts aléatoire* sont utilisés. 
+
+L'ensemble de ces modèles sont entraînés et évalués au moyen de l'ensemble des prédicteurs à disposition hormis les 5 variables de mobilité: leur utilisation restreint la qualité de notre analyse, car elles ne sont disponibles qu'à partir du 15 février 2020. Leurs effets coïncident avec celui de la variable de confinement, dont les données sont disponibles dans les premiers mois de 2020 également. Puisque cette étude souhaite souligner l'effet du confinement principalement, les variables de mobilité seront dans un premier temps écartées. La méthode des forêt aléatoire, quant à elle, sera également testé avec le jeu de données complet (5 variables de mobilité inclues). Il serait intéressant de comparer les résultats obtenus avec et sans ces variables.
+
+La variable cible étant une variable continue, l'erreur quadratique moyenne (RMSE) est la mesure considérée pour quantifier la performance des modèles et les comparer entre eux. Il s'agit du critère utilisé par [@gocheva2019regression], basé sur la vraisemblance du modèle.
+
+### Création de la partition 
+
+La partition est séparée en ensemble d'entrainement et de test, contenant respectivement 75% et 25% des observations. Trois partitions sont mise à disposition: la première enlève les 5 variables de mobilité, la deuxième enlève les 5 variables de mobilité ainsi que la variable de confinement et la troisième contient la totalité des variables (elle subit un traitement de données afin d'enlever les valeurs manquantes).
+
+```{r }
+DF_1 <- data %>% select(-c(retail_and_recreation_percent_change_from_baseline,
+                           grocery_and_pharmacy_percent_change_from_baseline,
+                           parks_percent_change_from_baseline,
+                           transit_stations_percent_change_from_baseline,
+                           workplaces_percent_change_from_baseline,
+                           residential_percent_change_from_baseline))
+
+train_id_1 <- sample(1:nrow(DF_1),0.75*nrow(DF_1))
+test_id_1 <- setdiff(1:nrow(DF_1),train_id_1)
+train_df_1 <- DF_1[train_id_1,]
+test_df_1 <- DF_1[test_id_1,]
+
+DF_11 <- data %>% select(-c(retail_and_recreation_percent_change_from_baseline,
+                           grocery_and_pharmacy_percent_change_from_baseline,
+                           parks_percent_change_from_baseline,
+                           transit_stations_percent_change_from_baseline,
+                           workplaces_percent_change_from_baseline,
+                           residential_percent_change_from_baseline,Conf_level))
+
+train_id_11 <- sample(1:nrow(DF_11),0.75*nrow(DF_11))
+test_id_11 <- setdiff(1:nrow(DF_11),train_id_11)
+train_df_11 <- DF_11[train_id_11,]
+test_df_11 <- DF_11[test_id_11,]
+
+DF_2 <- na.omit(data)
+train_id_2 <- sample(1:nrow(DF_2),0.75*nrow(DF_2))
+test_id_2 <- setdiff(1:nrow(DF_2),train_id_2)
+train_df_2 <- DF_2[train_id_2,]
+test_df_2 <- DF_2[test_id_2,]
+
+```
+
+# Résultats
+
+Pour chaque modèle, trois graphiques présentent en ordre aux figures (\@ref(fig:fig7), \@ref(fig:fig8)), la comparaison des taux moyens observés à ceux prédits à partir du modèle entraîné, les résidus du modèle en fonction du temps, et l'importance des variables du modèle (lorsque cette option est possible). Le graphique de densité des résidus est également présenté pour les deux modèles de forêts aléatoires. Le sommaire de chaque modèle est disponible en annexe. 
+
+### Modèle Linéaire - Avec variable de confinement
+
+
+```{r model_lm, echo= FALSE,size="tiny"}
+
+lm_model <- lm(mean_no2~.,data=train_df_1 %>% select(-Date))
+
+df_lm <- train_df_1 %>% select(mean_no2,Date)
+df_lm$pred_lm <- lm_model$fitted.values
+df_lm$diff_lm <- df_lm$mean_no2-df_lm$pred
+
+```
+
+```{r fig7, fig.cap="Modèle linéaire1"}
+ggplot(data= df_lm)+
+  geom_point(mapping=aes(x=Date, mean_no2, colour="Observation"))+
+  geom_point(mapping=aes(x=Date,y=pred_lm, colour="Prédiction"))+ 
+  labs(y="Taux moyen de NO2", x = "Date")+
+  ggtitle("Valeurs du taux de NO2 moyen observées et prédites par\nle modèle linéaire avec confinement")+
+  theme(legend.title = element_blank(),
+        legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))
+```
+
+```{r fig8, fig.cap="Modèle linéaire1",fig.height=2.5}
+reslinplot <- ggplot(data= df_lm)+
+  geom_point(mapping=aes(x=Date, diff_lm),color="blue")+
+  ggtitle("Résidus du modèle linéaire en\nfonction du temps") + 
+  labs(y="Résidus", x = "Date")
+
+linvarIMP <- as.data.frame(varImp(lm_model))
+linvarIMP <- add_rownames(linvarIMP, "variable")
+linvarIMP <- linvarIMP[order(linvarIMP$Overall),]
+linvarIMPplot <- ggplot(linvarIMP, aes(y = reorder(linvarIMP$variable,linvarIMP$Overall), x= linvarIMP$Overall)) + 
+  geom_bar(stat='identity') +
+  theme(axis.text.y = element_text( hjust = 1,size=5),
+        legend.title = element_blank(),
+        legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))+
+  labs(title = "Importance des variables\nmodèle linéaire", x = "Importance", y = "Variables" )  
+
+
+grid.arrange(reslinplot,linvarIMPplot,ncol=2)
+```
+
+
+Les résultats sommaires du modèle linéaire sont disponible à l'annexe \@ref(no2)
+Il est possible de voir le coefficient de détermination $R^2$ du modèle sur l'ensemble d'entrainement est de 72%. Il s'agit d'une valeur satisfaisante. Deux variables se démarquent en terme d'importance : la vitesse moyenne du vent (importance = 14.3) et la variable de lag sur 1 jour (importance = 14.1). En d'autres termes, c'est la valeur de la veille du taux de NO2 ainsi que la vitesse moyenne du vent qui influenceraient le plus sur la prédiction de la valeur actuelle - d'aujourd'hui - du taux de NO2.
+
+D'autre part, le graphique indiquant les valeurs du taux moyen de NO2 prédites (Figure \@ref(fig:fig7)) versus mesurées est satisfaisant. Ces valeurs forment un ensemble homogène. On note cependant que le modèle linéaire n'est pas en mesure de bien prédire les valeurs se situant au-dessus de 80 ppm, soit les valeurs "exceptionnelles": le modèle linéaire ne permet de généraliser les valeurs extrêmes. Ceci dit, il est intéressant de noter que le modèle a bien prédit la baisse du taux de NO2 en 2020.
+
+Par ailleurs, le graphique des résidus (Figure \@ref(fig:fig8)) obtenu confirme la validité des hypothèses du modèle linéaire. Les résidus semblent être répartis aléatoirement, mais de façon symétrique par rapport à l'axe 0 : les postulats de linéarité et d'homoscédasticité sont bien respectés. De plus, la majorité des résidus se situent entre + et - 20 ppm : ceci est convenable.
+
+Le traitement des données a été crucial: l'introduction de variables de saisonnalité a permis de bien considérer la dépendance temportelle et les différentes étapes de linéarisation des données permettent d'obtenir un modèle linéaire satisfaisant.
+
+Finalement, le RMSE pour ce modèle est de 8.31. Ce chiffre est obtenu avec la racine de la moyenne des erreurs au carré.
+À première vue, cette valeur semble convenable, bien que hors contexte. Elle sera interprétée plus tard, lorsque les modèles seront comparés entre eux, à partir de l'échantillon test. 
+
+### Modèle Linéaire - Sans variable de confinement
+
+Les graphiques résultats sont disponible aux figures \@ref(fig:fig9) et \@ref(fig:fig10) suivantes.
+```{r fig9, fig.cap="Modèle linéaire1"}
+lm_model11 <- lm(mean_no2~.,data=train_df_11)
+
+df_lm11 <- train_df_11 %>% select(mean_no2,Date)
+df_lm11$pred_lm <- lm_model11$fitted.values
+df_lm11$diff_lm <- df_lm11$mean_no2-df_lm11$pred
+
+
+ggplot(data= df_lm11)+
+  geom_point(mapping=aes(x=Date, mean_no2, colour="Observation"))+
+  geom_point(mapping=aes(x=Date,y=pred_lm, colour="Prédiction"))+ 
+  labs(y="Taux moyen de NO2", x = "Date")+
+  theme(legend.title = element_blank(),
+        legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))+
+  ggtitle("Valeurs du taux de NO2 moyen pour\nle modèle linéaire sans confinement")  
+```
+
+```{r fig10, fig.height=2,fig.cap="Importance",fig.height=2.5}
+reslinplot11 <- ggplot(data= df_lm11)+
+  geom_point(mapping=aes(x=Date, diff_lm),color="blue")+
+  ggtitle("Résidus du modèle linéaire en\nfonction du temps") + 
+  labs(y="Résidus", x = "Date")
+
+linvarIMP11 <- as.data.frame(varImp(lm_model11))
+linvarIMP11 <- add_rownames(linvarIMP11, "variable")
+linvarIMP11 <- linvarIMP11[order(linvarIMP11$Overall),]
+linvarIMPplot11 <- ggplot(linvarIMP11, aes(y = reorder(linvarIMP11$variable,linvarIMP11$Overall), x= linvarIMP11$Overall)) + geom_bar(stat='identity') +theme(axis.text.y = element_text( hjust = 1,size=5))+ 
+  labs(title = "Importance des variables\nmodèle linéaire sans var. conf.", x = "Importance", y = "Variables" )  
+
+
+grid.arrange(reslinplot11,linvarIMPplot11,ncol=2)
+```
+Il est possible de voir le sommaire des résultats pour ce modèle en annexe \@ref(no1)
+Le $R^2 ajusté$ est de 71%. Les deux variables les plus importantes restent inchangées et se démarquent encore plus des autres : il s'agit de la vitesse moyenne du vent (importance = 11.8) et de la valeur de la veille du taux de NO2 (importance = 15.6). La même observation se fait sur le graphique des valeurs prédites versus mesurées de NO2 : le modèle linéaire ne permet de bien généraliser les valeurs extrêmes et s'adapte bien à la diminution du taux en 2020. Le graphique des résidus est saisfaisant.
+
+Finalement, le RMSE pour ce modèle est de 8.97: la variable de confinement semble impacter très marginalement la qualité de la prédiction. Ceci sera approfondi par la suite, lors de la comparaison de modèles sur l'échantillon test. À présent, la variable de confinement est utilisée dans tous les modèles suivants.
+
+\newpage
+
+### SVM
+
+Comme énoncé dans la méthodologie, la validation croisée effectuée afin de déterminer le paramètre C optimal donne une valeur de 300. Il s'agit d'une valeur assez grande : la frontière se situe loin des points, ce qui devrait engendrer un petit taux d'erreur. À titre indicatif, la validation croisée a été effectuée sur une grille de valeurs allant jusqu'à 1000.
+
+Les graphiques résultats sont disponible dans les graphiques de la figure \@ref(fig:fig11) ci-dessous
+```{r fig11, fig.height=3, fig.cap="SVM"}
+# tuned_svm_2 <- tune.svm(mean_no2~.,data=train_df_1 %>% select(-Date),
+#                       kernel="linear", 
+#                       cost=seq(350,1000,50))
+# saveRDS(file="tune_svm2.rds",tuned_svm_2)
+
+tuned_svm <- readRDS("tune_svm1.rds")
+
+
+#tuned_svm$best.performance**0.5
+
+df_lm$pred_svm <- tuned_svm$best.model$fitted
+df_lm$diff_svm <- df_lm$mean_no2-df_lm$pred_svm
+
+
+p <- ggplot(data= df_lm)+
+  geom_point(mapping=aes(x=Date, y=mean_no2, colour="Observation"))+
+  geom_point(mapping=aes(x=Date,y=pred_svm,colour="Prédiction"))+
+  ggtitle("Taux de NO2 moyen observées et prédites par le modèle SVM")  + 
+  labs(y="Taux moyen de NO2", x = "Date") + 
+  guides(shape = guide_legend(override.aes = list(size = 0.5)))+
+  theme(legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10),
+        axis.ticks.x = element_blank(), axis.title.x = element_blank(),
+        axis.text.x = element_blank(),legend.title=element_text(size=5),
+        legend.text = element_text(size=5))
+
+
+p1 <- ggplot(data= df_lm)+
+  geom_point(mapping=aes(x=Date, diff_svm),color="blue")+
+  ggtitle("Résidus du modèle SVM linéaire en fonction du temps") + 
+  labs(y="Résidus", x = "Date")
+
+grid.arrange(p,p1,ncol=1)
+
+```
+
+
+Plusieurs observations peuvent être faites à ce stade :
+
+- Le RMSE obtenu est de 8,61: cette valeur est obtenue via la racine carré du meilleur modèle SVM (**mean(tuned_svm$best.model$residuals^2)^0.5**)
+- Le graphique des valeurs prédites versus observées du taux de NO2 moyen indique une moins bonne adéquation des données, particulièrement à partir de 2020. Le modèle SVM prédit mal les valeurs après 2020, ceci se reflète par la diminution de la tendance dans le graphique des résidus.
+- Le modèle ne permet pas de bien généraliser les valeurs extrêmes, puisqu'au delà des valeurs mesurées de 75 ppm, les prédictions du modèle ne dépassent pas cette valeur (approximativement). Somme toute, il pourrait s'agit de valeurs extrêmes que notre traitement de données n'a pas pu éliminer.
+- Contrairement aux modèles de régression ou de random forests, la méthode de validation croisée pour déterminer l'importance de chaque variable (fonction varImp) ne peut pas être réalisée sur un modèle SVM.
+- Finalement, le postulat de linéarité n'est pas respecté car les résidus sont en moyenne inférieurs à 0 à partir de l'année 2020.
+
+De plus, le sommaire du modèle est présenté à l'annexe \@ref(no3)
+
+\newpage
+
+### Forêts aléatoires - Modèle 1 
+
+La validation croisée est utilisée sur 2 paramètres : le nombres de prédicteurs utilisés et le nombre de noeuds terminaux.
+
+Les graphiques résultats sont présent à aux figures \@ref(fig:fig12), \@ref(fig:fig13) et \@ref(fig:fig14) ci-dessous:
+```{r fig12, fig.cap="RF1"}
+
+#tune_grid <- expand.grid(mtry = seq(3, 16, by = 1),node_size  = c(3:7))
+# Mis en commentaire pour faciliter le Knit
+# rf_gridsearch <-list()
+# rmse_list <- list()
+# rmse_final_list <- list()
+# rsq_list <- list()
+# for (i in seq(1,nrow(tune_grid))){
+#    rf_gridsearch[[i]] <-  randomForest(mean_no2 ~ ., data=train_df_1%>% select(-Date),ntree=300, 
+#                                        mtry=tune_grid$mtry[i], 
+#                                        node_size=tune_grid$node_size[i],
+#                                        importance=TRUE)
+#    rmse_list[[i]] <- sqrt(rf_gridsearch[[i]]$mse)
+#    rsq_list[[i]] <- tail(rf_gridsearch[[i]]$rsq,1)
+#    rmse_final_list[[i]] <- tail(sqrt(rf_gridsearch[[i]]$mse),1)
+#    print(paste("Rsqr:",rsq_list[[i]]))
+#    print(paste("RMSE:",rmse_final_list[[i]]))
+# }
+# saveRDS(object = rf_gridsearch,file = "rf_model.rds")
+rf_gridsearch <- readRDS("rf_model.rds")
+
+
+rmse_final_list <- sapply(1:length(rf_gridsearch),FUN = function(x){
+                      min(rf_gridsearch[[x]]$mse)})
+
+
+n_min=which(unlist(rmse_final_list)==min(rmse_final_list))
+n_max=which(unlist(rmse_final_list)==max(rmse_final_list))
+
+df_lm$pred_rf <- rf_gridsearch[[n_min]]$predicted
+df_lm$diff_rf <- df_lm$mean_no2-df_lm$pred_rf
+
+ggplot(data=df_lm)+ 
+  geom_point(mapping=aes(x=Date,y=mean_no2, colour="Observation"))+ 
+  geom_point(mapping=aes(x=Date,y=pred_rf, colour="Prédiction"))+ 
+  labs(y="Taux moyen de NO2", x = "Date")+
+  ggtitle("Taux de NO2 moyen observées et prédites par\nle modèle RF sans mobilité") +     theme(legend.title = element_blank(),legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10)) 
+```
+
+```{r fig13, fig.cap="Importance RF1"}
+rfIMP <- as.data.frame(rf_gridsearch[[n_min]]$importance[,1])
+rfIMP <- add_rownames(rfIMP, "variable")
+colnames(rfIMP) <- c("variable","Overall")
+rfIMP <- rfIMP[order(rfIMP$Overall),]
+rfIMPplot <- ggplot(rfIMP, aes(y = reorder(rfIMP$variable,rfIMP$Overall), x= rfIMP$Overall)) + geom_bar(stat='identity') +theme(axis.text.y = element_text( hjust = 1,size=5))+ labs(title = "Importance des variables modèle\nforêts aléatoires", x = "Importance", y = "Variables" )  
+
+resrf1 <- ggplot(data=df_lm)+ geom_point(mapping=aes(x=Date,y=diff_rf),color='blue') +
+  ggtitle("Résidus du modèle forêts \naléatoires 1") + 
+  labs(y="Résidus", x = "Date")
+
+grid.arrange(resrf1,rfIMPplot,ncol=2)
+```
+
+```{r fig14, fig.cap="residus et RMSE RF1",fig.height=2.5}
+densrf1 <- ggplot(data=df_lm)+ geom_density(mapping=aes(x=diff_rf),alpha=0.15,fill='green')+
+  ggtitle("Densité des résidus modèle\nforêts aléatoires 1")+ 
+  labs(y="Densité", x = "Résidus")
+
+df_rmse= melt(data.frame("best"=rf_gridsearch[[n_min]]$mse**0.5, "worst"= rf_gridsearch[[n_max]]$mse**0.5, "id"=1:length(rf_gridsearch[[n_min]]$mse)),id.vars="id")
+RMSEplot<- ggplot(data=df_rmse)+ 
+  geom_point(mapping=aes(x=id,y=value,color=variable))+
+  ggtitle("Évolution du RMSE pour\ndes modèle selon le\nnombre d'arbres dans la forêt")+
+  theme(legend.title=element_blank(),
+    legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))+
+  labs(y="RMSE", x = "Nombres d'arbres dans la forêt")
+
+
+grid.arrange(densrf1,RMSEplot,ncol=2)
+```
+
+
+Le sommaire du meilleur modèle est présenté à l'annexe \@ref(no4). il est possible d'y voir que le meilleur modèle obtenu est celui pour lequel 11 prédicteurs sont utilisés pour chaque split. Il renvoie une valeur de RMSE de 9,32. 
+
+Le graphique obtenu des valeurs prédites versus observées est intéressant : on voit que les valeurs prédites sont plus "centrées" que les valeurs observées. Les valeurs extrêmes observées,soit les taux moyens inférieures à 30ppm avant 2020 et supérieures à 75ppm, ne sont pas généralisées par notre modèle de prédiction. 
+
+La courbe de densité des résidus tracée traduit la normalité des résidus. Par contre, similairement au modèle SVM, le postulat de linéarité ne semble pas respecté car les résidus sont en moyenne inférieurs à 0 à partir de 2020.
+
+Finalement, un graphique illustrant l'évolution de la RMSE entre le pire et le meilleur modèle obtenu par validation croisée en fonction du nombre d'arbres est tracé (figure \@ref(fig:fig14). Plus le nombre d'arbres augmente, plus la valeur de la RMSE diminue, avant d'atteindre un plateau. Le nombre choisi de 300 arbres est donc plus que suffisant, puisque la RMSE se stabilise autour de 100 arbres. Il s'agit de trouver un bon équilibre entre la robustesse de la méthode et le risque de surapprentissage.
+
+Les variables les plus importantes sont "no2_lag1" (figure \@ref(fig:fig13), soit la valeur du taux de NO2 moyen de la veille (importance = 99) et "julian" (importance = 63). La variable de confinement est 6ème en terme d'importance: le confinement a un effet notable sur la prédiction du taux de NO2.
+
+
+### Forêts aléatoires - Modèle 2 
+
+Dans ce dernier modèle considéré, les 5 variables de mobilités sont incluses. C'est le seul modèle qui comporte ces variables. Les graphiques résultats sont disponible aux figures \@ref(fig:fig15) et \@ref(fig:fig16) ci-dessous:
+
+```{r fig15, fig.cap="RF2"}
+
+#tune_grid2 <- expand.grid(mtry = seq(3, 16, by = 2),
+ #                        node_size  = c(3:7))
+
+# Ici c'est mis en commentaire seuelement pour pas que le Knit prenne 10 heures à rouler.
+# rf_gridsearch2 <-list()
+# rmse_list2 <- list()
+# rmse_final_list2 <- list()
+# rsq_list2 <- list()
+# for (i in seq(1,nrow(tune_grid2))){
+#    rf_gridsearch2[[i]] <-  randomForest(mean_no2 ~ ., data=train_df_2%>% select(-Date),ntree=300, 
+#                                        mtry=tune_grid2$mtry[i], 
+#                                        node_size=tune_grid2$node_size[i],
+#                                        importance=TRUE)
+#    rmse_list2[[i]] <- sqrt(rf_gridsearch2[[i]]$mse)
+#    rsq_list2[[i]] <- tail(rf_gridsearch2[[i]]$rsq,1)
+#    rmse_final_list2[[i]] <- tail(sqrt(rf_gridsearch2[[i]]$mse),1)
+#    print(rsq_list2[[i]])
+#    print(rmse_final_list2[[i]])
+# }
+# 
+
+# saveRDS(file="rf_2.rds",rf_gridsearch2)
+rf_gridsearch2 <- readRDS("rf_2.rds")
+
+rmse_final_list2 <- sapply(1:length(rf_gridsearch2),FUN = function(x){
+                      min(rf_gridsearch2[[x]]$mse)})
+
+
+n_min2=which(unlist(rmse_final_list2)==min(unlist(rmse_final_list2)))
+n_max2=which(unlist(rmse_final_list2)==max(unlist(rmse_final_list2)))
+
+
+train_df_2$pred_rf_2 <- rf_gridsearch2[[n_min2]]$predicted
+train_df_2$diff <- train_df_2$mean_no2-train_df_2$pred_rf_2
+
+
+
+ggplot(data=train_df_2)+
+  geom_point(mapping=aes(x=Date,y=mean_no2, colour="Observation"))+
+  geom_point(mapping=aes(x=Date,y=pred_rf_2, colour="Prédiction"))+ 
+  labs(y="Taux moyen de NO2", x = "Date")+
+  ggtitle("Valeurs du taux de NO2 moyen observées et prédites par\nle modèle forêt aléatoire avec mobilité") +   theme(legend.title = element_blank(),legend.position = "top",
+        legend.justification="left",
+        legend.margin=ggplot2::margin(0,0,0,0),
+        legend.box.margin=ggplot2::margin(-10,-10,-10,-10))
+```
+
+```{r fig16, fig.cap="RF2_2",fig.height=2.5}
+rfIMP2 <- as.data.frame(rf_gridsearch2[[n_min2]]$importance[,1])
+rfIMP2 <- add_rownames(rfIMP2, "variable")
+colnames(rfIMP2) <- c("variable","Overall")
+rfIMP2 <- rfIMP2[order(rfIMP2$Overall),]
+ggplot(rfIMP2, aes(y = reorder(rfIMP2$variable,rfIMP2$Overall), x= rfIMP2$Overall),colour='blue') + geom_bar(stat='identity') +theme(axis.text.y = element_text( hjust = 1,size=5))+ labs(title = "Importance des variables modèle forêt aléatoire\navec mobilité", x = "Importance", y = "Variables" )  
+
+
+#CES 2 GRAPHES EN ANNEXE!
+
+#resRF2plot <- ggplot(data=train_df_2)+
+#  geom_point(mapping=aes(x=Date,y=diff,color=weekday)) +ggtitle("Résidus du modèle forêt aléatoire 2\nen fonction du jour de la semaine") +theme(legend.position='none')+ facet_wrap(weekday~.)+ labs(y="Résidus", x = "Date")
+
+
+#densRF2plot <- ggplot(data=train_df_2)+
+#  geom_density(mapping=aes(x=diff,fill=weekday),alpha=0.15)+ggtitle("Densité des résidus\ndu modèle forêt aléatoire 2")+theme(legend.position = "bottom", legend.text = element_text( size=5))+ labs(y="Densité", x = "Résidus")
+
+
+#grid.arrange(resRF2plot,densRF2plot,ncol=2)
+```
+Le sommaire du meilleur modèle est disponible à l'annexe \@ref(no5)
+Pour ce modèle, la validation croisée indique que le nombre optimal de prédicteur utilisé à chaque split est de 13, et renvoie une valeur de RMSE de 7,23. Il s'agit de la meilleure valeur obtenue parmi l'ensemble des modèles considérés! Les variables les plus importantes sont la température minimale (importance = 51,8) et la valeur du taux de NO2 de la veille (importance = 46). 
+
+Le graphique des prédictions versus observations indique que le modèle semble mieux performer puisqu'il ne semble pas démontrer de lacune pour la période critique de 2020 comme les autres modèles précédents. Le modèle parvient donc à correctement généraliser les observations, avec encore une légère différence pour les valeurs les plus extrêmes. Finalement, l'ensemble des graphiques des résidus (annexes) confirment que les postulats de linéarité et d’homoscédasticité sont respectés. Il est intéressant de noter que l'allure des résidus varie en fonction du jour considéré : si la normalité semble parfaite pour les jours du mercredi et du jeudi, elle semble légèrement moins normale pour les jours du vendredi et du dimanche.
+
+Les variables de mobilité sont donc très importantes quant à la prédiction du taux de NO2 : le taux de NO2 émis par les véhicules est directement lié à la circulation des voitures. En fait, il s'agit quasiment de la même variable, exprimée différemment! 
+De par la colinéarité de ces variables avec la variable cible ainsi que leurs effets qui coïncident avec celui du confinement.
+
+
+### Comparaison des différents modèles
+
+```{r }
+#modèle linéaire avec variable confinement
+
+predict_test_lm = predict(lm_model, newdata = test_df_1 )
+RMSE_test_lm = sqrt(mean((test_df_1$mean_no2 - predict_test_lm)^2))
+
+#modèle linéaire sans variable confinement
+predict_test_lm11 = predict(lm_model11, newdata= test_df_11)
+RMSE_test_lm11 = sqrt(mean((test_df_11$mean_no2 - predict_test_lm11)^2))
+
+#modèle svm 
+predict_test_svm = predict(tuned_svm$best.model, newdata= test_df_1)
+RMSE_test_svm = sqrt(mean((test_df_1$mean_no2 - predict_test_svm)^2))
+
+#modèle forêt aléatoire 1
+modelrf1 = randomForest(mean_no2 ~ ., data=train_df_1%>% select(-Date),ntree=300, 
+                                        mtry=11, 
+                                        node_size=5,
+                                        importance=TRUE)
+predict_test_rf1 = predict(modelrf1, newdata = test_df_1 %>% select(-Date))
+RMSE_test_rf1 = sqrt(mean((test_df_1$mean_no2 - predict_test_rf1)^2))
+
+#modèle forêt aléatoire 2
+modelrf2 = randomForest(mean_no2 ~ ., data=train_df_2%>% select(-c(Date,pred_rf_2, diff)),ntree=300, 
+                                        mtry=13, 
+                                        node_size=4,
+                                        importance=TRUE)
+
+predict_test_rf2 = predict(modelrf2, newdata = test_df_2 %>% select(-Date))
+RMSE_test_rf2 = sqrt(mean((test_df_2$mean_no2 - predict_test_rf2)^2))
+```
+
+
+```{r size='mini'}
+#compilation RMSE train et test
+RMSE_train = c(8.31,8.97,8.61,9.32, 7.23)
+RMSE_test = c(RMSE_test_lm,RMSE_test_lm11,RMSE_test_svm,RMSE_test_rf1,RMSE_test_rf2)
+var_import = c("vitesse moyenne du vent et valeur de la veille du taux de NO2", "vitesse moyenne du vent et valeur de la veille du taux de NO2",
+               "-", "valeur de la veille du taux de NO2", "température minimale et valeur de la veille du taux de NO2")
+mat_resultat = as.data.frame(rbind(RMSE_train, RMSE_test) )
+mat_resultat <- mat_resultat %>% rename(lineaire_avec_confinement = V1 , lineaire_sans_confinement = V2 , SVM = V3 , RF_sans_mobilite = V4, RF_avec_mobilite = V5)
+mat_resultat <- round(mat_resultat, 2)
+mat_resultat <- rbind(mat_resultat, var_import)
+rownames(mat_resultat) <- c("RMSE_train","RMSE_test","variables_importantes")
+
+```
+
+```{r Tab1, fig.cap="Tableau résultats"}
+mat_resultat%>%
+  kbl() %>%
+  kable_styling(font_size = 12)
+```
+*voir annexe \@ref(no6) pour explication du message d'erreur*
+<br>
+
+L'ensemble des modèles ont un RMSE de test supérieur au RMSE d'entraînement: la performance est surévaluée sur l'échantillon d'entraînement. Il est possible de noter que le modèle de forêts aléatoires avec variables de mobilité a une erreur test plus faible que lors de la période d'entrainement. Cette différence est non significative et peut être causée par une complexité moindre pour cette période.
+
+D'après le critère de sélection du RMSE de test, le modèle des forêts aléatoires contenant les six variables de mobilité et la variable d'indice de confinement est le plus performant avec une RMSE de 7,03. De plus, ce modèle a aussi le RMSE d'entraînement le plus faible. Par rapport au modèle de référence (régression linéaire avec variable de confinement), le RMSE test est réduit de 30%. Le fait d'ajouter les variables de mobilité dans le modèle des forêts aléatoires améliore la performance du modèle de 33% (passe de 10,56 à 7.03): ces variables de mobilité ont un effet notable sur le RMSE test. 
+
+Comme le modèle est sujet à être actualisé avec de nouvelles données, un point faible des forêts aléatoires est sa difficulté à interpréter des données entrantes qui n'ont jamais été "vue" par le modèle dans la phase d'entraînement. Ainsi, si la France invoque un niveau de confinement 4 (jusqu'ici un maximum de 3), le modèle performera très mal.
+
+# Analyse des variables
+
+L'analyse de l'importance des variables du modèle de forêts aléatoires incluant les variables de mobilité indique les effets qui influencent le plus sur la concentration de NO2 à Paris. Sur les 22 variables utilisées par le modèle, les 5 variables principales associées à leur augmentation en terme de MSE, sont les suivantes:
+
+  - la température minimale (52%)
+  - la valeur du taux de NO2 de la veille  (46%)
+  - la vitesse moyenne du vent (29%)
+  - la journée de la semaine (12%)
+  - la variation des déplacements vers la pharmacie et l'alimentation (5%)
+  
+Des graphiques sont présenté en annexe Figures (\@ref(fig:fig20),\@ref(fig:fig21),\@ref(fig:fig22),\@ref(fig:fig23)) illustrant les relations spécifiques entre ces variables et la variable cible.
+  
+Ces variables forment deux catégories. La première porte sur les variables hors du contrôle humain. Elle regroupe la température minimale et la vitesse du vent. La deuxième catégorie, à l'inverse, regroupe les variables sous contrôle humain, dont la journée de la semaine et la variation des déplacements vers la pharmacie et l'alimentation. Finalement, la valeur du taux de NO2 de la veille ne peut pas réellement être classée dans une des catégories.
+
+La variable qui influence le plus la concentration de NO2 est la température minimale. Lorsque les températures sont plus froides, il est probable que plus de personnes prennent la voiture ou le bus pour se déplacer, ce qui contribue à augmenter la concentration de NO2. Le froid a également pour conséquence la hausse de la demande de chauffage, qui entraîne une hausse de l'utilisation des chaudières au gaz ou au fioul. 
+
+L'augmentation de la concentration de NO2 en hiver liée à l'augmentation de l'utilisation des véhicules à combustion interne n'est cependant pas la seule explication. En effet, l'action du rayonnement solaire enclenche des réactions chimiques, avec l'O2, qui transforment le NO2 en monoxyde d'azote (NO) et en ozone (O3). Le *Guide d'estimation de la concentration de dioxyde d'azote (NO2) dans l'air ambiant lors de l'application des modèles de dispersion atmosphérique* indique par ailleurs que "ces réactions sont influencées par les facteurs météorologiques tels que l’intensité du rayonnement solaire, la température et la vitesse du vent"[@NO2guide]. Une étude québécoise sur les *Effets du dioxyde d’azote et de l’ozone sur les maladies respiratoires à Montréal*, a notamment montré que "les maximums de NO2 sont observés en février et mars, correspondant plutôt à des températures froides" et que "les concentrations moyennes journalières de l’O3 les plus élevées sont observées en été (juin, juillet et août)"[@NO2montreal]. 
+
+La concentration de NO2 de la veille est la deuxième variable en importance qui influence la concentration de NO2 de la journée.
+Cela montre que le NO2 a la caractéristique de s'accumuler dans l'air d'une journée à l'autre sans conditions météorologiques particulières (pluie ou vent). Ainsi, appliquer à Paris des mesures de courte durée de réduction de l'utilisation de la voiture ne permettrait pas de réduire la concentration de NO2 dans l'air.
+
+La dernière variable météorologique est la vitesse du vent. Une journée avec un vent fort a en moyenne une concentration de NO2 plus faible qu'une journée avec un vent faible (annexe). Cette observation est logique car puisque la variable cible est le taux de NO2 dans l'air, le vent fort empêche l'accumulation de NO2. 
+
+Les deux dernières variables ne sont pas causées par des phénomènes météorologiques. Elles reflètent donc l'impact de la variation des habitudes d'utilisation de la voiture sur le taux de pollution. Cependant, ces variables une importance beaucoup plus faible que les trois autres variables. 
+Ainsi, la concentration de NO2 est plus faible la fin de semaine que dans les jours de semaine. En effet, la concentration atteint respectivement en moyenne 37.5ppm et 32.8 ppm le samedi et le dimanche, alors qu'elle dépasse les 39ppm tous les jours de la semaine, atteignant près de 43 ppm en moyenne les mardi et vendredi. Ceci est du aux déplacements pour aller au travail la semaine. Ceci dit, malgré le confinement complet du printemps 2020, la concentration de NO2 ne semble pas diminuer avec la diminution des déplacements en voiture vers le lieu de travail. La variation des déplacements vers la pharmacie et l'alimentation exerce quant à elle une certaine influence sur le taux de NO2. Il semble que moins les personnes se déplacent pour aller à la pharmacie ou à l'épicerie, plus le taux de NO2 est faible (annexe). 
+
+L'analyse de l'importance des variables montre que la variation de l'utilisation de la voiture a un effet négligeable sur la concentration de NO2 comparativement aux variables météorologiques de température et de vent. De ce fait, les mesures de confinement qui limitent l'utilisation de la voiture auraient un faible impact sur la concentration de NO2.
+
+Cette observation va dans le même sens des conclusions d'une étude française de 1994 sur l'influence du trafic et des conditions météorologiques à Paris. Cette recherche conclue que "les mesures de restriction de circulation éventuelles auraient un effet plutôt réduit sur les teneurs en NO2". L'étude conclue de plus que "la pente [de la régression linéaire] est nettement plus forte entre le trafic et NO que celle obtenue pour NO2" ce qui fait du "monoxyde d'azote NO est un très bon indicateur de la pollution d'origine automobile"[@PollutionParis].
+
+\newpage
+
+# Conclusion
+
+Ce projet cherchait à étudier l'effet du confinement à Paris, à travers la réduction de l'utilisation de la voiture, sur le taux de NO2 émis. Pour ce faire, l'étude a porté sur la période du 2 février 2018 au 30 octobre 2020. Les mesures de NO2 ont été captées quotidiennement par des stations localisées dans Paris, tandis que l'indice de confinement a été évalué sur cette période à partir des annonces du gouvernement. Les variables de mobilité ne portaient que sur la période réduite du 15 février 2020 au 30 octrobre 2020. Les effets de temps et de la météo ont également été captés par l'ajout de variables supplémentaires. 
+Une fois les données traitées, plusieurs modèles de prédiction du taux quotidien de NO2 ont été entraînés et comparés. Par rapport au modèle linéaire de base, le modèle de prédiction le plus performant est le modèle de forêts aléatoires contenant les variables de mobilité. Il a été 30% plus performant avec un RMSE sur l'échantillon test de 7.03. 
+
+Finalement, grâce à l'analyse des variables qui influencent le plus le taux de NO2, il est apparu que les variables qui indiquent une variation de l'utilisation de la voiture ont un effet négligeable sur la variable cible comparativement aux variables météorologiques. Par conséquent, les mesures de confinement qui ont restreints la circulation à Paris ont eu un effet négligeable sur le taux de NO2.
+
+Ce projet a permis de mettre en évidence que le monoxyde d'azote NO est un meilleur indicateur de la pollution provenant des véhicules que ne l'est le NO2. Il serait intéressant dans le futur de tester la relation entre les mesures de confinement et le taux de NO.
+
+
+\newpage
+# Annexes
+```{r fig20, fig.cap="Alimentation et travail"}
+alimentationplot <- ggplot(data=data)+geom_point(mapping=aes(x=data$grocery_and_pharmacy_percent_change_from_baseline, y=data$mean_no2),colour="green")+
+  labs(y="Taux NO2 moyen", x = "Variation déplacements vers alim. et pharmacie") +ylim(0,80) +
+  ggtitle("Taux moyen de NO2 selon la variation\ndéplacements vers alim. ou phar.")
+
+travailplot <- ggplot(data=data)+geom_point(mapping=aes(x=data$workplaces_percent_change_from_baseline, y=data$mean_no2),colour="green")+labs(y="Taux NO2 moyen", x = "Variation déplacements vers travail")+ylim(0,80)+ggtitle("Taux moyen de NO2 selon la variation\ndéplacements vers travail")+theme(strip.text = element_text(size = 5))
+
+grid.arrange(alimentationplot,travailplot,ncol=2)
+```
+
+
+```{r fig21, fig.cap="No2 et vent"}
+ggplot(data=data) + 
+  geom_point(mapping=aes(x=data$Moy_vit_vent, y=data$mean_no2)) + labs(x="Vitesse moyenne du vent", y = "Concentration moyenne de NO2") + 
+  ggtitle("Variation du taux moyen de NO2 en fonction de la vitesse moy. du vent")+
+  theme(strip.text = element_text(size = 5))+ guides(shape = guide_legend(override.aes = list(size = 0.5)))
+
+```
+
+
+```{r fig22, fig.cap="FR04071 et temps" }
+
+ggplot(aq_keep )+geom_point(mapping = aes(x=Date,y=value,color=hour))+ 
+  labs(y="Taux de NO2 (ppm)", x = "Date")+
+  ggtitle("Taux de NO2 horaire au point FR04071 en fonction du temps")+ 
+  theme(legend.position = 'none')
+```
+
+```{r fig23, fig.cap="Densité et heure" }
+ggplot(aq_keep)+geom_density(mapping = aes(x=value,fill=hour),alpha=0.15) + labs(y="Densité", x = "Taux de NO2")+ggtitle("Densité pour les valeurs de NO2\nen fonction de l'heure de la mesure au point FR04071")+theme(legend.position="none")
+
+```
+
+#### Sommaire du modèle linéaire {#no2}
+```{r}
+summary(lm_model)
+```
+
+#### Sommaire du modèle linéaire sans variable confinement {#no1}
+```{r}
+summary(lm_model11)
+```
+
+#### Sommaire du modèle SVM {#no3}
+```{r}
+summary(tuned_svm$best.model)
+```
+
+#### Sommaire du modèle 1 de forêt aléatoire {#no4}
+```{r}
+
+rf_gridsearch[[n_min]]
+```
+
+#### Sommaire du modèle 2 de forêt aléatoire avec variables mobilité {#no5}
+```{r}
+rf_gridsearch2[[n_min2]]
+```
+
+#### Message d'erreur {#no6}
+Un message d'avertissement apparait lors de la prédiction pour les deux modèles de régression linéaire ("prediction from a rank-deficient fit may be misleading") : la variable "julian" est entièrement corrélée avec une ou plusieurs autres variables présentes dans le modèle. Il serait pertinent de la retirer des modèles dans un travail futur.
+
+\newpage
+# References
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
